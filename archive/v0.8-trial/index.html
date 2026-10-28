@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>深渊驯兽师 · Web Demo v0.8（首版试玩存档）</title>
+<style>
+  :root{--bg:#0d1425;--panel:#182338;--panel2:#121c2f;--gold:#e0b040;--text:#e8ebf3;--mut:#94a0bc;--red:#d9534f;--green:#7fb069;--blue:#4d87d1;--purple:#a06ee0;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Microsoft YaHei",system-ui,sans-serif;}
+  #app{max-width:960px;margin:0 auto;padding:16px;}
+  h1{font-size:24px;color:var(--gold);margin:8px 0}
+  .hud{display:flex;gap:16px;flex-wrap:wrap;background:var(--panel2);border:1px solid #2a3550;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:14px}
+  .hud b{color:var(--gold)}
+  .panel{background:var(--panel);border:1px solid #2a3550;border-radius:12px;padding:14px;margin-bottom:12px}
+  .battle{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .card{background:var(--panel2);border:1px solid #33415f;border-radius:10px;padding:10px;cursor:pointer;transition:.15s}
+  .card:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .card.disabled{opacity:.35;cursor:not-allowed;transform:none;border-color:#2a3550}
+  .card .t{color:var(--gold);font-weight:bold;font-size:14px}
+  .card .d{font-size:12px;color:var(--mut);margin-top:4px}
+  .enemy{flex:1;min-width:150px;background:var(--panel2);border:1px solid #5a3a3a;border-radius:10px;padding:10px;text-align:center;cursor:pointer;transition:.12s}
+  .enemy.sel{border-color:var(--gold);box-shadow:inset 0 0 0 2px var(--gold)}
+  .petpanel{background:var(--panel2);border:1px solid #3a5a44;border-radius:10px;padding:10px}
+  .bar{height:8px;background:#2a3145;border-radius:5px;overflow:hidden;margin-top:6px}
+  .bar>i{display:block;height:100%;background:var(--red)}
+  .bar.pet>i{background:var(--green)} .bar.cd>i{background:var(--gold)}
+  .btn{background:var(--gold);color:#20180a;border:none;border-radius:8px;padding:10px 16px;font-weight:bold;cursor:pointer;font-size:14px}
+  .btn.ghost{background:transparent;color:var(--mut);border:1px solid #3a4560}
+  .log{font-size:13px;color:var(--mut);line-height:1.6;max-height:150px;overflow:auto;background:var(--panel2);border-radius:8px;padding:8px 12px}
+  .logturn{color:#556080;font-size:11px;margin:4px 0 2px}
+  .lg.me{color:#8fe0a0}.lg.crit{color:#e0b040;font-weight:bold}.lg.enemy{color:#e08a8a}.lg.bad{color:#e06a6a}.lg.sys{color:#94a0bc}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid #3a4560;color:var(--mut);margin-left:6px}
+  .center{text-align:center}.big{font-size:18px;color:var(--gold);font-weight:bold;margin:10px 0 6px}
+  .muted{color:var(--mut);font-size:13px}.count{color:var(--red);font-weight:bold}
+  .capbox{border:1px solid var(--green);border-radius:12px;padding:14px}
+  .atkbtn{flex:0 0 140px;background:#3a2f14;border:2px solid var(--gold)}
+  /* P0 toast */
+  #toastLayer{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+  .toast{background:#1c2740;border:1px solid #4a5a80;color:#e8ebf3;padding:6px 14px;border-radius:20px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.4);animation:tin .2s ease-out}
+  .toast.good{border-color:#7fb069;color:#c6efb8}.toast.warn{border-color:#d9534f;color:#ffb3b0}
+  .toast.out{animation:tout .3s ease-in forwards}
+  @keyframes tin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+  @keyframes tout{to{opacity:0;transform:translateY(-8px)}}
+  /* P2 飘字 */
+  .floatnum{position:fixed;left:50%;top:34%;transform:translateX(-50%);font-weight:bold;font-size:22px;z-index:70;pointer-events:none;animation:fup .7s ease-out forwards;text-shadow:0 2px 6px rgba(0,0,0,.6)}
+  .floatnum.dmg{color:#8fe0a0}.floatnum.crit{color:#e0b040;font-size:28px}.floatnum.ult{color:#ffd36b;font-size:26px}.floatnum.hurt{color:#e08a8a}
+  @keyframes fup{from{opacity:1}to{opacity:0;transform:translate(-50%,-42px)}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toastLayer"></div>
+<script>
+// ======== 配置 ========
+const CFG = {
+  startSL: 80,
+  qualityAtk: {'白':62,'蓝':78,'紫':100,'橙':130},
+  qualityHP:  {'白':600,'蓝':740,'紫':950,'橙':1250},
+  qualityPrice: {'白':50,'蓝':110,'紫':220,'橙':420},
+  layers: [
+    {n:1,k:2,hp:245,atk:49.5},{n:2,k:2,hp:245,atk:49.5},{n:3,k:3,hp:245,atk:49.5},
+    {n:4,k:3,hp:245,atk:49.5},{n:5,k:3,hp:245,atk:49.5},{n:6,k:3,hp:245,atk:49.5},{n:7,k:3,hp:245,atk:49.5},
+    {n:8,k:1,hp:490,atk:59.4,boss:true,name:'深渊看门人'}
+  ],
+  slNormal:55, slElite:85, slBoss:200,
+  bossLayer:8, rampPerLayer:1.09,
+  weights: {normal:54, elite:32, heal:5, shop:4, event:5}
+};
+const STARTERS=[{name:'焰尾狐',element:'火',quality:'白'},{name:'澜纹鳄',element:'水',quality:'白'},{name:'苔甲兽',element:'草',quality:'白'}];
+const ELEM={火:'#e0574b',水:'#4d87d1',草:'#7fb069',暗:'#8c6eb4',光:'#e0b040'};
+const QCOLOR={白:'#e8ebf3',蓝:'#4d87d1',紫:'#a06ee0',橙:'#e0b040'};
+const BEATS={火:'草',草:'水',水:'火'};
+const ELNAMES=['火','水','草','暗','光'];
+const PETNAMES=['焰尾狐','岩壳龟','雾氪狼','雷羽雀','幽影猫','霜角鹿','金铃蛾','石甲兽'];
+function mult(a,d){ if(a===d)return 1; if(BEATS[a]===d)return 1.5; if(BEATS[d]===a)return 0.75; if((a==='暗'&&d==='光')||(a==='光'&&d==='暗'))return 1.75; return 1;}
+function counterText(el){ if(el==='暗'||el==='光'){return '与 '+(el==='暗'?'光':'暗')+' 互克';} const b=BEATS[el]; let by=null; for(const k in BEATS){if(BEATS[k]===el){by=k;break;}} return '克制 '+(b||'—')+'，被 '+(by||'—')+' 克制'; }
+function relText(a,d){ const m=mult(a,d); if(m===1.75)return '互克'; if(m>1)return '克制'; if(m<1)return '被克'; return '无关系'; }
+function critRoll(p){ return p.affix==='暴击 +12%' && Math.random()<0.12; }
+function hpText(p){ return Math.max(0,p.hp)+'/'+p.maxHp; }
+function rnd(a,b){return a+Math.random()*(b-a);} function pick(a){return a[Math.floor(Math.random()*a.length)];}
+function hpBar(cur,max,cls){const p=Math.max(0,Math.min(100,Math.round(cur/max*100)||0));return '<div class="bar '+cls+'"><i style="width:'+p+'%"></i></div>';}
+function qColor(q){return QCOLOR[q]||'#e8ebf3';}
+
+// ---- P0 Toast / P2 音效+飘字（浏览器才生效，测试环境自动跳过） ----
+function toast(msg,type){ var tl=document.getElementById('toastLayer'); if(!tl||typeof tl.appendChild!=='function')return; var d=document.createElement('div'); d.className='toast '+(type||''); d.textContent=msg; tl.appendChild(d); setTimeout(function(){ d.classList.add('out'); setTimeout(function(){ if(d.parentNode)d.parentNode.removeChild(d); },300); },1500); }
+function floatNum(txt,cls){ if(typeof document.createElement!=='function'||!document.body)return; var d=document.createElement('div'); d.className='floatnum '+(cls||'dmg'); d.textContent=txt; d.style.left=(50+(Math.random()*16-8))+'%'; document.body.appendChild(d); setTimeout(function(){ if(d.parentNode)d.parentNode.removeChild(d); },700); }
+var AC=null;
+function initAudio(){ try{ if(!AC){ var C=window.AudioContext||window.webkitAudioContext; if(C)AC=new C(); } }catch(e){} }
+function sfx(name){ if(!AC)return; try{ var t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain(); o.connect(g);g.connect(AC.destination); var f=300,d=.12,ty='square',v=.04;
+  if(name==='crit'){f=680;d=.16;ty='sawtooth';v=.07;} else if(name==='ult'){f=200;d=.3;ty='sawtooth';v=.06;}
+  else if(name==='hurt'){f=140;d=.12;ty='triangle';v=.05;} else if(name==='capture'){f=720;d=.25;ty='sine';v=.06;}
+  else if(name==='win'){f=880;d=.4;ty='sine';v=.06;} else if(name==='lose'){f=110;d=.5;ty='sine';v=.06;}
+  o.type=ty; o.frequency.setValueAtTime(f,t); o.frequency.exponentialRampToValueAtTime(Math.max(60,f*0.5),t+d);
+  g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+d); o.start(t); o.stop(t+d);
+ }catch(e){} }
+
+// ---- P1 战斗日志（对象+回合分组+颜色） ----
+function kindOf(t){ if(t.indexOf('🐾')>=0)return 'me'; if(t.indexOf('💥')>=0)return 'crit'; if(t.indexOf('💀')>=0)return 'bad'; if(t.indexOf(' 攻击 ')>=0)return 'enemy'; return 'sys'; }
+function log(t){ S.log.unshift({t:t,kind:kindOf(t),tn:S.turn}); if(S.log.length>60)S.log.pop(); }
+function renderLog(){ var out='',last=null; for(var i=0;i<S.log.length&&i<12;i++){ var e=S.log[i]; if(e.tn!==last){ out+='<div class="logturn">回合 '+e.tn+'</div>'; last=e.tn; } out+='<div class="lg '+e.kind+'">'+e.t+'</div>'; } return out; }
+
+const SKILLS=[
+  {id:'ult',name:'命令·大招',type:'技能',desc:'引爆大招 250%（CD3）'},
+  {id:'order',name:'号令·出击',type:'指令',desc:'宠物普攻 +30%（CD3）'},
+  {id:'feed',name:'喂食',type:'指令',desc:'出战宠回血 15%（CD3）'},
+  {id:'swap',name:'换宠',type:'指令',desc:'选择一只队友换上（耗行动）'},
+  {id:'guard',name:'稳固',type:'防御',desc:'下次受击减伤 50%'}
+];
+
+let S=null,capT=null;
+function newGame(){
+  if(capT){clearInterval(capT);capT=null;}
+  S={screen:'start',layer:1,sl:CFG.startSL,team:[],active:0,log:[],enemies:[],turn:1,route:'normal',
+     bossCharge:0,charging:false,turnDamage:0,shield:false,capture:null,result:'',usedElite:false,
+     nodeOptions:null,pendingReward:0,noCapture:false,buffAtk:0,startShieldNext:false,freeCapture:false,
+     event:null,eventOpts:[],shopOpts:[],target:0,swapOpen:false};
+}
+function mkPet(name,el,q,weak,affix){ let hp=CFG.qualityHP[q]; if(weak)hp=Math.round(hp*0.8); const baseCd=3; const cd=(affix==='大招 CD -1')?Math.max(2,baseCd-1):baseCd; return {name,element:el,quality:q,atk:CFG.qualityAtk[q],hp:hp,maxHp:hp,cd:0,maxCd:cd,feedCd:0,orderCd:0,weak:!!weak,affix:affix||''}; }
+function activePet(){return S.team[S.active];}
+function allDead(){return S.team.every(p=>p.hp<=0);}
+function aliveEnemies(){return S.enemies.filter(e=>e.hp>0);}
+const app=document.getElementById('app');
+function hud(){ const p=activePet(); return '<div class="hud"><span>层数 <b>'+S.layer+'/8</b></span><span>SL <b>'+S.sl+'</b></span><span>队伍 <b>'+S.team.length+'/3</b></span><span>出战 <b>'+(p?p.name:'—')+'</b>'+(S.buffAtk?'<span>攻击+'+Math.round(S.buffAtk*100)+'%</span>':'')+'</div>'; }
+
+function render(){
+  let h='';
+  if(S.screen==='start') h=startScreen();
+  else if(S.screen==='petselect') h=petSelectScreen();
+  else { h=hud();
+    if(S.screen==='map') h+=mapScreen();
+    else if(S.screen==='combat') h+=combatScreen();
+    else if(S.screen==='capture') h+=captureScreen();
+    else if(S.screen==='shop') h+=shopScreen();
+    else if(S.screen==='event') h+=eventScreen();
+    else if(S.screen==='result') h+=resultScreen();
+  }
+  app.innerHTML=h;
+}
+function startScreen(){
+  return '<div class="panel center"><h1>深渊驯兽师 · Web Demo v0.8</h1>'+
+  '<p class="muted">Roguelike 卡牌爬塔 + 宠物捕获 · 垂直切片（1 段 8 层）</p>'+
+  '<div class="log" style="text-align:left;max-width:680px;margin:12px auto">玩法：<br>'+
+  '· 每层随机 2 个节点二选一（第 1 层固定普通战，Boss 前双补给）。<br>'+
+  '· 每回合可【普攻】或使用 1 个技能；大招需充能，技能有冷却。<br>'+
+  '· 战斗可点敌人切换目标；换宠会弹窗选择；提示在顶部横幅。<br>'+
+  '· 宠物血条＝你的生命，跨战斗保留；全队归零失败。</div>'+
+  '<button class="btn" onclick="startGame()">开始游戏</button></div>';
+}
+function petSelectScreen(){
+  let cs=''; STARTERS.forEach((s,i)=>{ cs+='<div class="card" onclick="chooseStarter('+i+')"><div class="t" style="color:'+ELEM[s.element]+'">'+s.name+'</div><div class="d">'+s.element+'系 · '+s.quality+'</div><div class="d">ATK '+CFG.qualityAtk[s.quality]+' · HP '+CFG.qualityHP[s.quality]+'</div><div class="d">'+counterText(s.element)+'</div></div>'; });
+  return '<div class="panel"><div class="big">选择初始宠物（三选一）</div><div class="muted">它是你的初始战力，血条＝你的生命。</div><div class="row" style="margin-top:12px">'+cs+'</div></div>';
+}
+function genNodes(layer){
+  if(layer===1) return ['normal'];
+  const w=CFG.weights, pool=Object.keys(w).map(k=>[k,w[k]]);
+  function draw(){ const tot=pool.reduce((a,b)=>a+b[1],0); let r=Math.random()*tot; for(const[k,v]of pool){ r-=v; if(r<=0)return k; } return 'normal'; }
+  let a=draw(), b=draw(), g=0; while(b===a&&g<30){b=draw();g++;}
+  let opts=[a,b];
+  if(layer===7){ opts = Math.random()<0.5?['heal','shop']:['shop','heal']; }
+  return opts;
+}
+const NODE={normal:{t:'普通战斗',d:'标准敌人 · +55 SL'},elite:{t:'精英战斗',d:'敌人更强 · +85 SL & 更好捕获'},
+  heal:{t:'回血祭坛',d:'全队回 40% 生命 · 跳过本层战斗'},shop:{t:'黑市商店',d:'卖增益不卖血 · 跳过本层战斗'},
+  event:{t:'未知事件',d:'风险与收益 · 跳过本层战斗'}};
+function mapScreen(){
+  if(S.layer===CFG.bossLayer){ return '<div class="panel"><div class="big">第 8 层 · 深渊看门人</div><p class="muted">终局 Boss：每 3 回合蓄力，需当回合打出 ≥15% 最大生命伤害打断。</p><button class="btn" onclick="chooseNode(\'boss\')">挑战 Boss</button></div>'; }
+  if(!S.nodeOptions) S.nodeOptions=genNodes(S.layer);
+  let cs=''; S.nodeOptions.forEach((n,i)=>{ const info=NODE[n]||NODE.normal; cs+='<div class="card" onclick="chooseNode('+i+')"><div class="t">'+info.t+'</div><div class="d">'+info.d+'</div></div>'; });
+  return '<div class="panel"><div class="big">第 '+S.layer+' 层 · 二选一</div><p class="muted">节点随机，补给不一定出现——Boss 前双补给。</p><div class="row">'+cs+'</div></div>';
+}
+function chooseNode(i){
+  const n=(typeof i==='string')?i:(S.nodeOptions?S.nodeOptions[i]:null);
+  if(!n){ if(S.layer===CFG.bossLayer){ beginBattle('boss'); } return; }
+  if(n==='normal'||n==='elite'){ beginBattle(n); }
+  else if(n==='boss'){ beginBattle('boss'); }
+  else if(n==='heal'){ S.team.forEach(p=>{ if(p.hp>0)p.hp=Math.min(p.maxHp,p.hp+Math.round(p.maxHp*0.4)); }); toast('回血祭坛：全队回 40%','good'); advance(); }
+  else if(n==='shop'){ openShop(); }
+  else if(n==='event'){ openEvent(); }
+}
+function advance(){ S.layer++; S.nodeOptions=null; if(S.layer>CFG.bossLayer){S.screen='result';S.result='win';render();} else { toast('进入第 '+S.layer+' 层'); S.screen='map'; render(); } }
+
+function beginBattle(route){
+  const L=CFG.layers.find(x=>x.n===S.layer); const elite=(route==='elite');
+  S.turn=1; S.bossCharge=0; S.charging=false; S.turnDamage=0; S.shield=false; S.usedElite=elite; S.target=0; S.swapOpen=false; S.log=[];
+  S.noCapture=false; S.pendingReward=0;
+  S.enemies=[]; const hpMul=elite?1.4:1.0, atkMul=elite?1.4:1.0;
+  const ramp=Math.pow(CFG.rampPerLayer||1.05, S.layer-1);
+  const baseHP=L.hp*ramp, baseATK=L.atk*ramp;
+  const perHP=baseHP*hpMul/L.k, perATK=baseATK*atkMul/L.k;
+  for(let i=0;i<L.k;i++){
+    if(L.boss){ const bh=Math.round(baseHP), ba=Math.round(baseATK); S.enemies.push({name:L.name,element:pick(ELNAMES),hp:bh,atk:ba,maxHp:bh,boss:true}); }
+    else { const h=Math.round(perHP); S.enemies.push({name:pick(PETNAMES),element:pick(ELNAMES),hp:h,maxHp:h,atk:Math.round(perATK),boss:false}); }
+  }
+  S.team.forEach(p=>{ p.cd=p.maxCd-1; p.feedCd=0; p.orderCd=0; });
+  if(S.startShieldNext){ S.shield=true; S.startShieldNext=false; toast('护盾生效：下次受击减伤 50%','good'); }
+  S.screen='combat'; render();
+}
+function bossTick(){ if(S.enemies.some(e=>e.boss&&e.hp>0)){ if(!S.charging){ S.bossCharge++; if(S.bossCharge>=3){S.charging=true;S.bossCharge=0;toast('⚠ Boss 蓄力，下回合需打断！','warn');} } } }
+function targetEnemy(){ let t=S.enemies[S.target]; if(!t||t.hp<=0){ t=aliveEnemies()[0]; if(t) S.target=S.enemies.indexOf(t); } return t||null; }
+function setTarget(i){ if(S.enemies[i]&&S.enemies[i].hp>0){ S.target=i; render(); } }
+function combatScreen(){
+  const p=activePet();
+  let eh=''; S.enemies.forEach((e,i)=>{ if(e.hp<=0)return; eh+='<div class="enemy '+(i===S.target?'sel':'')+'" onclick="setTarget('+i+')"><div style="color:'+ELEM[e.element]+';font-weight:bold">'+e.name+(e.boss?' · BOSS':'')+'</div><div class="tag">'+e.element+'</div><div class="muted">HP '+Math.max(0,e.hp)+'/'+e.maxHp+' · ATK '+e.atk+'</div>'+hpBar(e.hp,e.maxHp,'')+'<div class="muted" style="font-size:11px;margin-top:4px">对'+p.element+'：'+relText(p.element,e.element)+'</div></div>'; });
+  const petHtml='<div class="petpanel"><div style="color:'+ELEM[p.element]+';font-weight:bold">'+p.name+'（'+p.quality+'·'+p.element+'）'+(p.weak?' <span class="tag">虚弱</span>':'')+'</div>'+
+    '<div class="muted">HP '+hpText(p)+' · ATK '+p.atk+'</div>'+hpBar(p.hp,p.maxHp,'pet')+
+    '<div class="muted" style="margin-top:6px">克制：'+counterText(p.element)+'</div>'+
+    '<div class="muted" style="margin-top:4px">词条：'+(p.affix||'无')+'</div>'+
+    '<div class="muted" style="margin-top:6px">大招：'+(p.cd>0?('冷却 '+p.cd):'就绪')+'</div>'+hpBar(p.maxCd-p.cd,p.maxCd,'cd')+
+    '<div class="muted" style="margin-top:8px">队伍：'+S.team.map(x=>x.name+(x.hp>0?'':'✝')).join(' / ')+'</div></div>';
+  let acts='<div class="card atkbtn" onclick="doAction(\'attack\',-1)"><div class="t">普攻</div><div class="d">宠物攻击当前目标</div></div>';
+  SKILLS.forEach((s,i)=>{ let dis=false;
+    if(s.id==='ult'&&p.cd>0)dis=true; if(s.id==='order'&&p.orderCd>0)dis=true; if(s.id==='feed'&&p.feedCd>0)dis=true; if(s.id==='swap'&&S.team.length<2)dis=true;
+    const cdTxt=(s.id==='ult'&&p.cd>0)?(' · CD'+p.cd):(s.id==='order'&&p.orderCd>0)?(' · CD'+p.orderCd):(s.id==='feed'&&p.feedCd>0)?(' · CD'+p.feedCd):'';
+    acts+='<div class="card '+(dis?'disabled':'')+'" onclick="doAction(\'skill\','+i+')"><div class="t">'+s.name+'<span class="tag">'+s.type+'</span></div><div class="d">'+s.desc+cdTxt+'</div></div>'; });
+  const tgt=targetEnemy();
+  return '<div class="panel"><div class="big">第 '+S.layer+' 层战斗 · 回合 '+S.turn+(S.charging?' · <span style="color:#d9534f">Boss 蓄力中</span>':'')+' · 目标：'+(tgt?tgt.name:'—')+'</div>'+
+    '<div class="battle"><div>'+petHtml+'</div><div><div class="row">'+eh+'</div><div class="muted" style="margin-top:6px">点击敌人可切换目标（不耗行动）</div></div></div>'+
+    '<div class="big">行动（每回合选 1 个）</div><div class="row">'+acts+'</div>'+
+    '<div class="big" style="font-size:14px;margin-top:12px">战斗日志</div><div class="log">'+renderLog()+'</div></div>'+
+    (S.swapOpen?swapModal():'');
+}
+function swapModal(){
+  let cards=''; S.team.forEach((p,i)=>{ const dead=p.hp<=0, cur=i===S.active;
+    cards+='<div class="card '+(dead||cur?'disabled':'')+'" onclick="doSwap('+i+')">'+
+      '<div class="t" style="color:'+ELEM[p.element]+'">'+p.name+(cur?'（当前）':'')+'</div>'+
+      '<div class="d">'+p.quality+'·'+p.element+' · HP '+hpText(p)+'</div>'+hpBar(p.hp,p.maxHp,'pet')+
+      '<div class="d">克制：'+counterText(p.element)+'</div>'+
+      '<div class="d">词条：'+(p.affix||'无')+'</div>'+
+      (dead?'<div class="d" style="color:#d9534f">已倒下</div>':'')+'</div>'; });
+  return '<div style="position:fixed;inset:0;background:rgba(5,8,16,.75);display:flex;align-items:center;justify-content:center;z-index:50" onclick="if(event.target===this)cancelSwap()"><div class="panel" style="max-width:680px;width:92%"><div class="big">选择要换上的宠物</div><div class="row">'+cards+'</div><div style="margin-top:12px"><button class="btn ghost" onclick="cancelSwap()">取消（不耗行动）</button></div></div></div>';
+}
+function openSwap(){ S.swapOpen=true; render(); }
+function cancelSwap(){ S.swapOpen=false; render(); }
+function doSwap(i){
+  S.swapOpen=false;
+  const np=S.team[i]; if(!np||np.hp<=0||i===S.active){ render(); return; }
+  const p=activePet(); if(p.cd>0)p.cd--; if(p.feedCd>0)p.feedCd--; if(p.orderCd>0)p.orderCd--;
+  S.active=i; log('切换到 '+S.team[i].name);
+  resolveTurn();
+}
+function resolveTurn(){
+  enemiesAct();
+  if(activePet().hp<=0) nextPet();
+  if(!S.enemies[S.target]||S.enemies[S.target].hp<=0){ const a=aliveEnemies()[0]; if(a) S.target=S.enemies.indexOf(a); }
+  if(allDead()){ S.screen='result';S.result='lose';sfx('lose');render();return; }
+  S.turn++; if(S.turn>40){ toast('战斗超时，判负','warn'); S.screen='result';S.result='lose';sfx('lose');render();return; }
+  bossTick(); render();
+}
+function doAction(kind,idx){
+  if(S.screen!=='combat'||S.swapOpen) return;
+  let p=activePet();
+  if(!p||p.hp<=0){ nextPet(); p=activePet(); if(!p||p.hp<=0){ S.screen='result';S.result='lose';sfx('lose');render();return; } }
+  if(kind==='skill'){ const s=SKILLS[idx]; if(!s)return;
+    if(s.id==='ult'&&p.cd>0){ toast('大招冷却中','warn'); render(); return; }
+    if(s.id==='order'&&p.orderCd>0){ toast('号令冷却中','warn'); render(); return; }
+    if(s.id==='feed'&&p.feedCd>0){ toast('喂食冷却中','warn'); render(); return; }
+    if(s.id==='swap'){ if(S.team.length<2){ toast('只有一只宠物','warn'); render(); return; } openSwap(); return; }
+  }
+  if(p.cd>0)p.cd--; if(p.feedCd>0)p.feedCd--; if(p.orderCd>0)p.orderCd--;
+  S.turnDamage=0;
+  if(kind==='attack'){ petAttack(1.0,1.0); } else { useSkill(SKILLS[idx].id); }
+  if(aliveEnemies().length===0){ winBattle(); return; }
+  resolveTurn();
+}
+function petAttack(mul,extra){
+  const p=activePet(), t=targetEnemy(); if(!t)return;
+  let d=p.atk*mul*mult(p.element,t.element)*rnd(0.95,1.05)*extra*(1+(S.buffAtk||0));
+  const cr=critRoll(p); if(cr)d*=1.5;
+  d=Math.round(d); t.hp-=d; S.turnDamage+=d;
+  floatNum(d, cr?'crit':'dmg'); sfx(cr?'crit':'hit');
+  log('🐾 '+p.name+' 攻击 '+t.name+' '+d+(cr?'（暴击）':'')+(mult(p.element,t.element)>1?'（克制）':''));
+}
+function useSkill(id){
+  const p=activePet(), t=targetEnemy();
+  if(id==='ult'){ let d=p.atk*2.5*mult(p.element,t.element)*rnd(0.95,1.05)*(1+(S.buffAtk||0)); const cr=critRoll(p); if(cr)d*=1.5; d=Math.round(d); t.hp-=d; S.turnDamage+=d; p.cd=p.maxCd; floatNum(d,'ult'); sfx('ult'); log('💥 '+p.name+' 大招 '+d+(cr?'（暴击）':'')+'！'); return; }
+  if(id==='order'){ p.orderCd=3; petAttack(1.0,1.3); return; }
+  if(id==='feed'){ const h=Math.round(p.maxHp*0.15); p.hp=Math.min(p.maxHp,p.hp+h); p.feedCd=3; floatNum('+'+h,'dmg'); log('🍖 '+p.name+' 回血 '+h); return; }
+  if(id==='guard'){ S.shield=true; log('🛡 稳固：下次受击减伤 50%'); return; }
+}
+function enemiesAct(){
+  S.enemies.forEach(e=>{
+    if(e.hp<=0)return;
+    if(e.boss&&S.charging){ if(S.turnDamage>=e.maxHp*0.15){ log('✅ 打断蓄力！'); } else { const d=Math.round(e.maxHp*0.3); S.team.forEach(x=>{ if(x.hp>0)x.hp=Math.max(0,x.hp-d); }); log('💢 未打断，全队受 '+d+' 重击','enemy'); floatNum(d,'hurt'); sfx('hurt'); } S.charging=false; return; }
+    const p=activePet(); let d=e.atk*mult(e.element,p.element)*rnd(0.95,1.05); if(p.affix==='受击减伤 8%')d*=0.92; d=Math.round(d);
+    if(S.shield){ d=Math.round(d*0.5); S.shield=false; }
+    if(p&&p.weak) d=Math.round(d*1.15);
+    if(S.team.some(x=>x.hp>0)){ p.hp-=d; log(e.name+' 攻击 '+p.name+' '+d); if(p.hp<=0){ p.hp=0; log('💀 '+p.name+' 倒下'); nextPet(); } }
+  });
+  S.turnDamage=0;
+}
+function nextPet(){ const i=S.team.findIndex(p=>p.hp>0); if(i>=0)S.active=i; }
+function winBattle(){
+  const L=CFG.layers.find(x=>x.n===S.layer);
+  const bonus=S.team.filter(p=>p.hp>0&&p.affix==='每场 SL +6').length*6;
+  if(bonus>0){ S.sl+=bonus; toast('词条「每场 SL +6」+'+bonus,'good'); }
+  if(L.boss){ S.screen='result';S.result='win';sfx('win');render();return; }
+  if(S.noCapture){ S.sl+=S.pendingReward; toast('试炼通过，+'+S.pendingReward+' SL','good'); advance(); return; }
+  let gain=S.usedElite?CFG.slElite:CFG.slNormal; S.sl+=gain; toast('胜利，+'+gain+' SL','good'); offerCapture();
+}
+
+// ---- 捕获 ----
+function capQuality(layer,elite){
+  let q; if(layer<=2)q=pick(['白','蓝']); else if(layer<=5)q=pick(['蓝','紫']); else q=pick(['紫','橙']);
+  if(elite){ const up={白:'蓝',蓝:'紫',紫:'橙',橙:'橙'}; q=up[q]; }
+  return q;
+}
+function offerCapture(){
+  const q=capQuality(S.layer,S.usedElite); const el=pick(ELNAMES), name=pick(PETNAMES);
+  const price=S.freeCapture?0:Math.round(CFG.qualityPrice[q]); S.freeCapture=false;
+  const affix=pick(['暴击 +12%','受击减伤 8%','每场 SL +6','大招 CD -1']);
+  S.capture={name,element:el,quality:q,price,left:10,affix,paused:false,fullTeam:S.team.length>=3};
+  S.screen='capture';
+  if(capT)clearInterval(capT);
+  capT=setInterval(()=>{ if(S.screen!=='capture'){clearInterval(capT);capT=null;return;} if(S.capture.paused)return; S.capture.left--; if(S.capture.left<=0){clearInterval(capT);capT=null;toast('捕获超时，放弃','warn');afterCapture();} render(); },1000);
+  render();
+}
+function pauseCapture(){ if(S.capture){ S.capture.paused=!S.capture.paused; render(); } }
+function captureScreen(){ const c=S.capture; if(!c)return mapScreen();
+  let rep='';
+  if(c.fullTeam){ rep='<div style="margin-top:14px"><div class="big" style="font-size:15px">队伍已满（3/3）· 选择要替换的宠物（当前血量）：</div><div class="row">'+S.team.map((p,i)=>'<div class="card" onclick="replaceWith('+i+')"><div class="t" style="color:'+ELEM[p.element]+'">'+p.name+'</div><div class="d">'+p.quality+'·'+p.element+' · HP '+hpText(p)+'</div>'+hpBar(p.hp,p.maxHp,'pet')+'<div class="d">克制：'+counterText(p.element)+'</div><div class="d">词条：'+(p.affix||'无')+'</div></div>').join('')+'</div></div>'; }
+  return '<div class="panel capbox"><div style="font-size:22px;color:var(--gold);font-weight:bold">捕获结算</div>'+
+    '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px">'+
+      '<div style="flex:1;min-width:280px">'+
+        '<div style="font-size:28px;font-weight:bold;color:'+ELEM[c.element]+'">'+c.name+'</div>'+
+        '<div style="margin:10px 0;font-size:17px">品质 <b style="color:'+qColor(c.quality)+';font-size:22px">'+c.quality+'</b>　系别 <b style="color:'+ELEM[c.element]+';font-size:20px">'+c.element+'</b></div>'+
+        '<div style="font-size:16px">词条：'+c.affix+'</div>'+
+        '<div style="font-size:15px;margin-top:8px">克制关系：'+counterText(c.element)+'</div>'+
+        '<div class="muted" style="font-size:13px;margin-top:4px">对我方：'+(activePet()?relText(activePet().element,c.element):'—')+'（'+(activePet()?activePet().name:'')+' 视角）</div>'+
+      '</div>'+
+      '<div style="flex:0 0 250px;border-left:1px solid #2a3550;padding-left:16px">'+
+        '<div style="font-size:16px">捕获价 <b style="color:var(--gold);font-size:24px">'+c.price+'</b> SL</div>'+
+        '<div style="font-size:15px;margin-top:4px">当前 '+S.sl+' → 剩 '+(S.sl-c.price)+'</div>'+
+        '<div class="count" style="font-size:20px;margin-top:8px">'+(c.paused?'⏸ 已暂停':'倒计时 '+c.left+'s')+'</div>'+
+        '<button class="btn ghost" style="margin-top:8px" onclick="pauseCapture()">'+(c.paused?'继续':'暂停')+'</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="row" style="margin-top:16px">'+
+      (c.fullTeam?'':'<button class="btn" onclick="confirmCapture()">确认捕获</button>')+
+      '<button class="btn ghost" onclick="afterCapture()">放弃</button>'+
+    '</div>'+ rep +'</div>';
+}
+function confirmCapture(){ const c=S.capture; if(!c)return; if(c.fullTeam){ toast('队伍已满，请选择替换','warn'); render(); return; } if(S.sl<c.price){toast('SL 不足，放弃','warn');return afterCapture();} S.sl-=c.price; S.team.push(mkPet(c.name,c.element,c.quality,false,c.affix)); sfx('capture'); toast('捕获成功：'+c.name+'（'+c.quality+'·'+c.element+'）','good'); afterCapture(); }
+function replaceWith(i){ const c=S.capture; if(!c||!S.team[i])return; if(S.sl<c.price){toast('SL 不足，放弃','warn');return afterCapture();} S.sl-=c.price; const old=S.team[i].name; S.team[i]=mkPet(c.name,c.element,c.quality,false,c.affix); if(S.active>=S.team.length)S.active=0; sfx('capture'); toast('用 '+c.name+' 替换 '+old,'good'); afterCapture(); }
+function afterCapture(){ if(capT){clearInterval(capT);capT=null;} S.capture=null; advance(); }
+
+// ---- 商店 ----
+function openShop(){
+  S.shopOpts=[
+    {label:'攻击强化 +10%（本局）',cost:120,fn:()=>{ S.buffAtk=Math.min(0.3,Math.round((S.buffAtk+0.1)*100)/100); toast('攻击 +10%（当前 +'+Math.round(S.buffAtk*100)+'%）','good'); }},
+    {label:'下场战斗护盾',cost:50,fn:()=>{ S.startShieldNext=true; toast('下场战斗开局护盾','good'); }},
+    {label:'捕获网（下次捕获免费）',cost:80,fn:()=>{ S.freeCapture=true; toast('下次捕获免费','good'); }},
+    {label:'离开',cost:0,fn:()=>{ toast('离开商店'); }}
+  ];
+  S.screen='shop'; render();
+}
+function shopScreen(){
+  let cs=''; S.shopOpts.forEach((o,i)=>{ const aff=o.cost===0?'':(S.sl<o.cost?'（SL不足）':''); cs+='<div class="card" onclick="shopPick('+i+')"><div class="t">'+o.label+'</div><div class="d">'+(o.cost>0?o.cost+' SL':'直接离开')+aff+'</div></div>'; });
+  return '<div class="panel"><div class="big">黑市商店（不卖血）</div><p class="muted">当前 SL：'+S.sl+' · 可连续购买，点「离开」继续</p><div class="row">'+cs+'</div></div>';
+}
+function shopPick(i){ const o=S.shopOpts[i]; if(!o)return; if(o.cost>S.sl){toast('SL 不足','warn');render();return;} if(o.cost>0)S.sl-=o.cost; o.fn(); if(o.cost===0){ advance(); } else { render(); } }
+
+// ---- 事件 ----
+const EVENTS={
+  ruin:{title:'遗弃巢穴',desc:'一只虚弱但可用的宠物蜷缩在此。接受则收编（-20% 生命），放弃则离开。',
+    opts:[{label:'接受（获得虚弱宠）',fn:()=>{ if(S.team.length>=3){toast('队伍已满，无法收编','warn');} else { const el=pick(ELNAMES),q=pick(['白','蓝']); S.team.push(mkPet('遗弃者',el,q,true)); toast('收编虚弱宠 '+el+'（'+q+'）','good'); } advance(); }},
+          {label:'放弃',fn:()=>{ toast('离开遗弃巢穴'); advance(); }}]},
+  forge:{title:'强化台',desc:'花 60 SL，让出战宠本局攻击 +15%（可叠加）。',
+    opts:[{label:'强化（60 SL）',fn:()=>{ if(S.sl<60){toast('SL 不足','warn');} else { S.sl-=60; const p=activePet(); p.atk=Math.round(p.atk*1.15); toast('强化台：'+p.name+' 攻击 +15%（→'+p.atk+'）','good'); } advance(); }},
+          {label:'放弃',fn:()=>{ toast('离开强化台'); advance(); }}]},
+  trial:{title:'试炼之柱',desc:'接受一场额外精英战，胜利 +180 SL；拒绝则离开。',
+    opts:[{label:'接受挑战',fn:()=>{ beginBattle('elite'); S.pendingReward=180; S.noCapture=true; }},
+          {label:'拒绝',fn:()=>{ toast('拒绝试炼'); advance(); }}]}
+};
+function openEvent(){ const keys=Object.keys(EVENTS); S.event=EVENTS[pick(keys)]; S.screen='event'; render(); }
+function eventScreen(){ const e=S.event; if(!e)return mapScreen();
+  let cs=''; e.opts.forEach((o,i)=>{ cs+='<div class="card" onclick="eventPick('+i+')"><div class="t">'+o.label+'</div></div>'; });
+  return '<div class="panel"><div class="big">事件 · '+e.title+'</div><p class="muted">'+e.desc+'</p><div class="row">'+cs+'</div></div>';
+}
+function eventPick(i){ const e=S.event; if(!e)return; const o=e.opts[i]; if(!o)return; S.event=null; o.fn(); }
+
+function resultScreen(){ const win=S.result==='win';
+  return '<div class="panel center"><h1>'+(win?'🏆 通关！':'💀 全队倒下')+'</h1><p class="muted">'+(win?'你击败了深渊看门人。':'再来一次，注意血条跨战斗保留。')+'</p>'+
+    '<p class="muted">最终 SL：'+S.sl+' · 队伍：'+S.team.length+'/3 · 层数：'+S.layer+'/8</p><button class="btn" onclick="startGame()">再玩一次</button></div>';
+}
+
+function startGame(){ initAudio(); newGame(); S.screen='petselect'; render(); }
+function chooseStarter(i){ const s=STARTERS[i]; S.team=[mkPet(s.name,s.element,s.quality)]; S.active=0; S.screen='map'; render(); }
+
+window.startGame=startGame; window.chooseStarter=chooseStarter; window.chooseNode=chooseNode;
+window.doAction=doAction; window.setTarget=setTarget; window.openSwap=openSwap; window.cancelSwap=cancelSwap; window.doSwap=doSwap;
+window.confirmCapture=confirmCapture; window.afterCapture=afterCapture; window.pauseCapture=pauseCapture; window.replaceWith=replaceWith;
+window.shopPick=shopPick; window.eventPick=eventPick;
+newGame(); render();
+</script>
+</body>
+</html>
